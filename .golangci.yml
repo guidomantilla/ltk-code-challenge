@@ -1,0 +1,131 @@
+version: "2"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: all
+
+  disable:
+    - err113
+    - exhaustruct
+    - godot
+    - lll
+    - mnd
+    - revive
+    - tagliatelle
+    - varnamelen
+    - wsl
+    - nlreturn
+    - whitespace
+    - testpackage
+
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - dupl
+          - errcheck
+          - errchkjson
+          - forbidigo
+          - containedctx
+          - wrapcheck
+          - forcetypeassert
+
+  settings:
+    depguard:
+      rules:
+        main:
+          list-mode: original
+          deny:
+            # ------------------------------------------------------------------------
+            # LOGGING
+            # ------------------------------------------------------------------------
+            - pkg: "log"
+              desc: "use zerolog instead of stdlib log"
+            - pkg: "github.com/sirupsen/logrus"
+              desc: "use zerolog instead of stdlib log"
+            - pkg: "go.uber.org/zap"
+              desc: "use zerolog instead of stdlib log"
+
+            # ------------------------------------------------------------------------
+            # INSECURE CRYPTO
+            # ------------------------------------------------------------------------
+            - pkg: "crypto/md5"
+              desc: "crypto/md5 is insecure. use crypto/sha256"
+            - pkg: "crypto/sha1"
+              desc: "crypto/sha1 is insecure. use crypto/sha256"
+
+            # ------------------------------------------------------------------------
+            # INSECURE RAND
+            # ------------------------------------------------------------------------
+            - pkg: "^math/random$"
+              desc: "use math/random/v2 or crypto/random instead"
+
+            # ------------------------------------------------------------------------
+            # DEPRECATED IO
+            # ------------------------------------------------------------------------
+            - pkg: "io/ioutil"
+              desc: "ioutil is deprecated since Go 1.16"
+
+            # ------------------------------------------------------------------------
+            # LEGACY ERRORS
+            # ------------------------------------------------------------------------
+            - pkg: "github.com/pkg/errors"
+              desc: "use standard package errors or fmt.Errorf with %w"
+
+            # ------------------------------------------------------------------------
+            # OLD LIBRARIES
+            # ------------------------------------------------------------------------
+            - pkg: "github.com/mitchellh/mapstructure"
+              desc: "avoid untyped mapping; prefer typed structs + json"
+            - pkg: "github.com/bitly/go-simplejson"
+              desc: "avoid dynamic JSON; use encoding/json or gjson"
+
+            # ------------------------------------------------------------------------
+            # FORBIDDEN PACKAGES
+            # -------------------------------------------------------------------------
+            # - pkg: "net/http/pprof"
+            #   desc: "pprof should not be imported directly except in tools"
+            - pkg: "runtime/pprof"
+              desc: "prevent accidental CPU profiling in production code"
+            - pkg: "runtime/debug"
+              desc: "do not use ReadBuildInfo, SetGCPercent, etc. in prod"
+            - pkg: unsafe
+              desc: "unsafe must not be used outside low-level internal packages"
+
+            # ------------------------------------------------------------------------
+            # AVOID XML / GOB
+            # ------------------------------------------------------------------------
+            - pkg: encoding/xml
+              desc: "avoid XML if possible; prefer JSON or protobuf"
+            - pkg: encoding/gob
+              desc: "gob is insecure and non-portable; avoid using it"
+
+            # ------------------------------------------------------------------------
+            # SYSTEM / DEBUG
+            # ------------------------------------------------------------------------
+            - pkg: debug/elf
+              desc: "debug/elf should not be used outside tools"
+            - pkg: debug/macho
+              desc: "debug/macho should not be used outside tools"
+
+    forbidigo:
+      forbid:
+        - pattern: ^(fmt\.Print(|f|ln)|fmt\.Fprint(|f|ln)|print|println)$
+        - pattern: ^(os.Getenv|os.LookupEnv|os.Setenv|os.Unsetenv|os.ExpandEnv)$
+        - pattern: syscall.Getenv
+
+    funlen:
+      lines: 220
+
+    ireturn:
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+        - lifecycle.Server
+        - servers.Server

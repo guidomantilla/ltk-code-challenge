@@ -1,0 +1,12 @@
+version: "3.8"
+services:
+  ltk-postgres:
+    image: postgres:12.2
+    environment:
+      POSTGRES_DB: ltk-postgres
+      POSTGRES_USER: ltk-postgres-admin
+      POSTGRES_PASSWORD: ltk-postgres-secret
+    volumes:
+      - .:/docker-entrypoint-initdb.d/
+    ports:
+      - "5432:5432"
