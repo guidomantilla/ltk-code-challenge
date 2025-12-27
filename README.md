@@ -30,7 +30,7 @@ The following environment variables are required (already defined in `.envrc`):
 - `DB_USER`: PostgreSQL user.
 - `DB_PASSWORD`: PostgreSQL password.
 - `DB_HOST`: Database host (default: `localhost`).
-- `DB_PORT`: Database port (default: `5432`).
+- `DB_PORT`: Database port (default: `5433`).
 
 ## Database Setup
 
