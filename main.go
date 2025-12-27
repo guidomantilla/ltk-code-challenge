@@ -2,18 +2,19 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"syscall"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/qmdx00/lifecycle"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
 	"ltk-code-challenge/core"
+	"ltk-code-challenge/pkg/resources"
 	"ltk-code-challenge/pkg/servers"
 )
 
@@ -29,22 +30,17 @@ func main() {
 		lifecycle.WithSignal(syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGKILL),
 	)
 
-	var pool *pgxpool.Pool
-	{
-		//nolint:nosprintfhostport
-		pool, err = pgxpool.New(ctx, fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
-			viper.GetString("DB_USER"), viper.GetString("DB_PASSWORD"),
-			viper.GetString("DB_HOST"), viper.GetString("DB_PORT"), viper.GetString("DB_NAME")))
-		if err != nil {
-			log.Fatal().Msg(fmt.Sprintf("Unable to connect to database: %v", err))
-		}
+	otelShutdown, err := resources.SetupOTelSDK(ctx)
+	if err != nil {
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup OpenTelemetry SDK: %v", err))
+	}
+	defer func() {
+		err = errors.Join(err, otelShutdown(context.Background()))
+	}()
 
-		err = pool.Ping(ctx)
-		if err != nil {
-			log.Fatal().Msg(fmt.Sprintf("Unable to ping to database: %v", err))
-		}
-
-		log.Info().Msg("Connected to database successfully")
+	pool, err := resources.CreateDatabaseConnectionPool(ctx)
+	if err != nil {
+		log.Fatal().Msg(fmt.Sprintf("Unable to create database connection pool: %v", err))
 	}
 
 	repo := core.NewRepository(pool)
@@ -63,6 +59,7 @@ func main() {
 		}
 
 		app.Attach(servers.BuildHttpServer(httpServer))
+		app.Attach(servers.BuildBaseServer(pool))
 	}
 
 	if app.Run() != nil {
