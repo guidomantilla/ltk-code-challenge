@@ -8,9 +8,6 @@ install:
 	cd tools && go get -tool github.com/vladopajic/go-test-coverage/v2@latest
 	cd tools && go get -tool golang.org/x/vuln/cmd/govulncheck@latest
 
-fetch-dependencies:
-	go mod download
-
 imports:
 	go mod tidy
 	goimports-reviser -rm-unused -set-alias -format -recursive .
