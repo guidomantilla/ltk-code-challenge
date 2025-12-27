@@ -58,3 +58,4 @@ report:
 ##
 update-dependencies:
 	go get -u ./... && go get -t -u ./... && go mod tidy
+	go work sync
