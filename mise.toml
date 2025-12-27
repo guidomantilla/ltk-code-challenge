@@ -1,6 +1,5 @@
 [tools]
 go = "1.25.5"
-golangci-lint = "2.7.2"
 
 [env]
 DB_NAME = "ltk-postgres"
