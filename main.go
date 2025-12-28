@@ -21,6 +21,7 @@ import (
 
 func main() {
 	var err error
+
 	ctx := context.Background()
 	name, version := "ltk-code-challenge", "1.0"
 
@@ -37,6 +38,7 @@ func main() {
 
 	pool, err := resources.CreateDatabaseConnectionPool(ctx)
 	if err != nil {
+		//nolint:gocritic
 		log.Fatal().Msg(fmt.Sprintf("Unable to create database connection pool: %v", err))
 	}
 

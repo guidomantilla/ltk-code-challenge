@@ -24,6 +24,7 @@ func CreateTracer(ctx context.Context) (func(context.Context) error, error) {
 	if err != nil {
 		return func(context.Context) error { return nil }, fmt.Errorf("failed to create tracer provider: %w", err)
 	}
+
 	otel.SetTracerProvider(tp)
 
 	return tp.Shutdown, nil
