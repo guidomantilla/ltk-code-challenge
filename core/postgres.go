@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	pgx "github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type DBInstance interface {
@@ -13,14 +15,21 @@ type DBInstance interface {
 }
 
 type Repository struct {
-	pool DBInstance
+	tracer trace.Tracer
+	pool   DBInstance
 }
 
 func NewRepository(pool DBInstance) *Repository {
-	return &Repository{pool: pool}
+	return &Repository{
+		tracer: otel.GetTracerProvider().Tracer("ltk-code-challenge/core"),
+		pool:   pool,
+	}
 }
 
 func (r *Repository) SaveEvent(ctx context.Context, event *Event) (*Event, error) {
+	ctx, span := r.tracer.Start(ctx, "repository.SaveEvent")
+	defer span.End()
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -45,6 +54,9 @@ func (r *Repository) SaveEvent(ctx context.Context, event *Event) (*Event, error
 }
 
 func (r *Repository) GetEventById(ctx context.Context, id string) (*Event, error) {
+	ctx, span := r.tracer.Start(ctx, "repository.GetEventById")
+	defer span.End()
+
 	var e Event
 
 	err := r.pool.QueryRow(

@@ -8,10 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	"go.opentelemetry.io/otel"
 )
-
-var tracer = otel.Tracer("ltk-code-challenge")
 
 type RepositoryInterface interface {
 	SaveEvent(ctx context.Context, event *Event) (*Event, error)
@@ -27,9 +24,6 @@ func NewHandlers(repository RepositoryInterface) *Handlers {
 }
 
 func (h *Handlers) PostEvents(gctx *gin.Context) {
-	ctx, span := tracer.Start(gctx, "POST /PostEvents")
-	defer span.End()
-
 	var event Event
 
 	// Accepts a JSON payload with title, description, start_time, and end_time.
@@ -51,6 +45,8 @@ func (h *Handlers) PostEvents(gctx *gin.Context) {
 	}
 
 	// Inserts the event into a PostgreSQL database, generating a UUID for id and setting created_at to current time.
+	ctx := gctx.Request.Context()
+
 	savedEvent, err := h.repository.SaveEvent(ctx, &event)
 	if err != nil {
 		log.Err(err).Msg("saving event failed")
@@ -64,9 +60,6 @@ func (h *Handlers) PostEvents(gctx *gin.Context) {
 }
 
 func (h *Handlers) GetEvents(gctx *gin.Context) {
-	ctx, span := tracer.Start(gctx, "GET /GetEvents")
-	defer span.End()
-
 	// Ready body
 	body, err := io.ReadAll(gctx.Request.Body)
 	if err != nil {
@@ -94,6 +87,8 @@ func (h *Handlers) GetEvents(gctx *gin.Context) {
 	}
 
 	// Get Event by ID: GET /events/{id}
+	ctx := gctx.Request.Context()
+
 	events, err := h.repository.GetEventById(ctx, id)
 	if err != nil {
 		// Checks that for empty slices, 404 is returned

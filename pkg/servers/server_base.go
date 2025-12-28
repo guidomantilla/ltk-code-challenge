@@ -10,7 +10,7 @@ import (
 )
 
 type baseServer struct {
-	ctx          context.Context
+	ctx          context.Context //nolint:containedctx
 	name         string
 	closeChannel chan struct{}
 	closables    []resources.Closable
@@ -33,11 +33,11 @@ func (server *baseServer) Run(ctx context.Context) error {
 
 	server.ctx = ctx
 	<-server.closeChannel
+
 	return nil
 }
 
 func (server *baseServer) Stop(_ context.Context) error {
-
 	log.Info().Str("stage", "shut down").Str("component", server.name).Msg("stopping")
 	defer log.Info().Str("stage", "shut down").Str("component", server.name).Msg("stopped")
 
@@ -46,5 +46,6 @@ func (server *baseServer) Stop(_ context.Context) error {
 	}
 
 	close(server.closeChannel)
+
 	return nil
 }
