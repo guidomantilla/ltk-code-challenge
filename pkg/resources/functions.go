@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
+	runtimemetrics "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -26,6 +27,8 @@ import (
 
 type StopFn func(ctx context.Context)
 
+func noopStop(ctx context.Context) {}
+
 func Trace(ctx context.Context) (StopFn, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
@@ -37,7 +40,7 @@ func Trace(ctx context.Context) (StopFn, error) {
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {
-		return func(context.Context) {}, fmt.Errorf("failed to create the OTLP exporter: %w", err)
+		return noopStop, fmt.Errorf("failed to create the OTLP exporter: %w", err)
 	}
 
 	tp := sdktrace.NewTracerProvider(
@@ -56,22 +59,16 @@ func Trace(ctx context.Context) (StopFn, error) {
 	return stopFn, nil
 }
 
-// Profile habilita métricas de runtime (GC, memstats, goroutines, etc.)
-// OJO: esto requiere que Measure() ya haya setiado el MeterProvider.
 func Profile(ctx context.Context) (StopFn, error) {
-	// Runtime metrics (GC/mem/goroutines) viven en contrib:
-	// go get go.opentelemetry.io/contrib/instrumentation/runtime
-	//
-	// import runtimemetrics "go.opentelemetry.io/contrib/instrumentation/runtime"
-	//
-	// err := runtimemetrics.Start(
-	//     runtimemetrics.WithMinimumReadMemStatsInterval(time.Second),
-	// )
-	// if err != nil { ... }
-	//
-	// Esa instrumentation no expone un Stop() en todas las versiones.
-	// Por eso devolvemos un no-op stopFn.
-	return func(context.Context) {}, nil
+	err := runtimemetrics.Start(
+		runtimemetrics.WithMinimumReadMemStatsInterval(1 * time.Second),
+	)
+	if err != nil {
+		return noopStop, err
+	}
+
+	// No-op stop: runtime metrics no exponen Stop()
+	return noopStop, nil
 }
 
 func Measure(ctx context.Context) (StopFn, error) {
@@ -80,7 +77,7 @@ func Measure(ctx context.Context) (StopFn, error) {
 		otlpmetricgrpc.WithInsecure(),
 	)
 	if err != nil {
-		return func(context.Context) {}, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
+		return noopStop, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
 	}
 
 	mp := sdkmetric.NewMeterProvider(
@@ -106,7 +103,7 @@ func Logger(ctx context.Context) (StopFn, error) {
 		otlploggrpc.WithInsecure(),
 	)
 	if err != nil {
-		return func(context.Context) {}, fmt.Errorf("failed to create OTLP log exporter: %w", err)
+		return noopStop, fmt.Errorf("failed to create OTLP log exporter: %w", err)
 	}
 
 	lp := sdklog.NewLoggerProvider(
@@ -140,14 +137,14 @@ func Logger(ctx context.Context) (StopFn, error) {
 
  */
 
-func CreateDatabaseConnectionPool(ctx context.Context) (*pgxpool.Pool, error) {
+func CreateDatabaseConnectionPool(ctx context.Context) (*pgxpool.Pool, StopFn, error) {
 	//nolint:nosprintfhostport
 	cfg, err := pgxpool.ParseConfig(fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		viper.GetString("DB_USER"), viper.GetString("DB_PASSWORD"),
 		viper.GetString("DB_HOST"), viper.GetString("DB_PORT"), viper.GetString("DB_NAME")))
 	if err != nil {
 		log.Error().Err(err).Msg(fmt.Sprintf("Unable to parse database connection string: %v", err))
-		return nil, fmt.Errorf("failed to parse database connection string: %w", err)
+		return nil, noopStop, fmt.Errorf("failed to parse database connection string: %w", err)
 	}
 
 	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
@@ -155,16 +152,20 @@ func CreateDatabaseConnectionPool(ctx context.Context) (*pgxpool.Pool, error) {
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		log.Error().Err(err).Msg(fmt.Sprintf("Unable to connect to database: %v", err))
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, noopStop, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	err = pool.Ping(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg(fmt.Sprintf("Unable to ping to database: %v", err))
-		return nil, fmt.Errorf("failed to ping to database: %w", err)
+		return nil, noopStop, fmt.Errorf("failed to ping to database: %w", err)
 	}
 
-	return pool, nil
+	stopFn := func(ctx context.Context) {
+		pool.Close()
+	}
+
+	return pool, stopFn, nil
 }
 
 /*

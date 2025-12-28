@@ -31,15 +31,15 @@ func main() {
 
 	viper.AutomaticEnv()
 
-	stopFn, err := resources.Trace(ctx)
+	stopFn, err := resources.Logger(ctx)
 	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup tracing: %v", err))
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup logging: %v", err))
 	}
 	defer stopFn(ctx)
 
-	stopFn, err = resources.Profile(ctx)
+	stopFn, err = resources.Trace(ctx)
 	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup profiling: %v", err))
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup tracing: %v", err))
 	}
 	defer stopFn(ctx)
 
@@ -49,17 +49,18 @@ func main() {
 	}
 	defer stopFn(ctx)
 
-	stopFn, err = resources.Logger(ctx)
+	stopFn, err = resources.Profile(ctx)
 	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup logging: %v", err))
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup profiling: %v", err))
 	}
 	defer stopFn(ctx)
 
-	pool, err := resources.CreateDatabaseConnectionPool(ctx)
+	pool, stopFn, err := resources.CreateDatabaseConnectionPool(ctx)
 	if err != nil {
 		//nolint:gocritic
 		log.Fatal().Msg(fmt.Sprintf("Unable to create database connection pool: %v", err))
 	}
+	defer stopFn(ctx)
 
 	repo := core.NewRepository(pool)
 	handlers := core.NewHandlers(repo)
@@ -88,7 +89,6 @@ func main() {
 		}
 
 		app.Attach(servers.BuildHttpServer(httpServer))
-		app.Attach(servers.BuildBaseServer(pool))
 	}
 
 	if app.Run() != nil {
