@@ -3,9 +3,12 @@ package core
 import (
 	"context"
 	"fmt"
+	"time"
 
 	pgx "github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -15,18 +18,24 @@ type DBInstance interface {
 }
 
 type Repository struct {
-	tracer trace.Tracer
-	pool   DBInstance
+	tracer  trace.Tracer
+	metrics *DBMetrics
+	pool    DBInstance
 }
 
 func NewRepository(pool DBInstance) *Repository {
 	return &Repository{
-		tracer: otel.GetTracerProvider().Tracer("ltk-code-challenge/core"),
-		pool:   pool,
+		tracer:  otel.GetTracerProvider().Tracer("ltk-code-challenge/core"),
+		metrics: NewDBMetrics(),
+		pool:    pool,
 	}
 }
 
 func (r *Repository) SaveEvent(ctx context.Context, event *Event) (*Event, error) {
+	start := time.Now()
+	var err error
+	defer func() { r.metrics.Observe(ctx, "save_event", start, err) }()
+
 	ctx, span := r.tracer.Start(ctx, "repository.SaveEvent")
 	defer span.End()
 
@@ -54,12 +63,16 @@ func (r *Repository) SaveEvent(ctx context.Context, event *Event) (*Event, error
 }
 
 func (r *Repository) GetEventById(ctx context.Context, id string) (*Event, error) {
+	start := time.Now()
+	var err error
+	defer func() { r.metrics.Observe(ctx, "get_event_by_id", start, err) }()
+
 	ctx, span := r.tracer.Start(ctx, "repository.GetEventById")
 	defer span.End()
 
 	var e Event
 
-	err := r.pool.QueryRow(
+	err = r.pool.QueryRow(
 		ctx,
 		`SELECT id, title, description, start_time, end_time, created_at
 		 FROM events
@@ -78,4 +91,40 @@ func (r *Repository) GetEventById(ctx context.Context, id string) (*Event, error
 	}
 
 	return &e, nil
+}
+
+/*
+
+ */
+
+type DBMetrics struct {
+	qTotal   metric.Int64Counter
+	qErrors  metric.Int64Counter
+	qLatency metric.Float64Histogram
+}
+
+func NewDBMetrics() *DBMetrics {
+	meter := otel.Meter("ltk-code-challenge/db")
+
+	qTotal, _ := meter.Int64Counter("db.query.total")
+	qErrors, _ := meter.Int64Counter("db.query.errors.total")
+	qLatency, _ := meter.Float64Histogram("db.query.duration.ms")
+
+	return &DBMetrics{qTotal: qTotal, qErrors: qErrors, qLatency: qLatency}
+}
+
+func (m *DBMetrics) Observe(ctx context.Context, op string, start time.Time, err error) {
+	attrs := []attribute.KeyValue{
+		attribute.String("db.system", "postgres"),
+		attribute.String("db.operation", op), // ej: "save_event", "get_event"
+	}
+
+	m.qTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
+
+	ms := float64(time.Since(start).Milliseconds())
+	m.qLatency.Record(ctx, ms, metric.WithAttributes(attrs...))
+
+	if err != nil {
+		m.qErrors.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
 }
