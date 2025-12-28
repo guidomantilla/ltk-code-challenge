@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -27,14 +26,29 @@ func main() {
 
 	viper.AutomaticEnv()
 
-	otelShutdown, err := resources.CreateTracer(ctx)
+	stopFn, err := resources.Trace(ctx)
 	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup OpenTelemetry SDK: %v", err))
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup tracing: %v", err))
 	}
+	defer stopFn(ctx)
 
-	defer func() {
-		err = errors.Join(err, otelShutdown(context.Background()))
-	}()
+	stopFn, err = resources.Profile(ctx)
+	if err != nil {
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup profiling: %v", err))
+	}
+	defer stopFn(ctx)
+
+	stopFn, err = resources.Measure(ctx)
+	if err != nil {
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup metrics: %v", err))
+	}
+	defer stopFn(ctx)
+
+	stopFn, err = resources.Logger(ctx)
+	if err != nil {
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup logging: %v", err))
+	}
+	defer stopFn(ctx)
 
 	pool, err := resources.CreateDatabaseConnectionPool(ctx)
 	if err != nil {
