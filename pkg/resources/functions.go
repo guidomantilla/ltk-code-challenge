@@ -23,21 +23,21 @@ import (
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"google.golang.org/grpc"
 )
 
 type StopFn func(ctx context.Context)
 
 func noopStop(ctx context.Context) {}
 
-func Trace(ctx context.Context) (StopFn, error) {
+func Trace(ctx context.Context, conn *grpc.ClientConn) (StopFn, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
 	))
 
 	exp, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint("localhost:4317"),
-		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithGRPCConn(conn),
 	)
 	if err != nil {
 		return noopStop, fmt.Errorf("failed to create the OTLP exporter: %w", err)
@@ -71,10 +71,9 @@ func Profile(ctx context.Context) (StopFn, error) {
 	return noopStop, nil
 }
 
-func Measure(ctx context.Context) (StopFn, error) {
+func Measure(ctx context.Context, conn *grpc.ClientConn) (StopFn, error) {
 	exp, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint("localhost:4317"),
-		otlpmetricgrpc.WithInsecure(),
+		otlpmetricgrpc.WithGRPCConn(conn),
 	)
 	if err != nil {
 		return noopStop, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
@@ -97,10 +96,9 @@ func Measure(ctx context.Context) (StopFn, error) {
 	return stopFn, nil
 }
 
-func Logger(ctx context.Context) (StopFn, error) {
+func Logger(ctx context.Context, conn *grpc.ClientConn) (StopFn, error) {
 	exp, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint("localhost:4317"),
-		otlploggrpc.WithInsecure(),
+		otlploggrpc.WithGRPCConn(conn),
 	)
 	if err != nil {
 		return noopStop, fmt.Errorf("failed to create OTLP log exporter: %w", err)

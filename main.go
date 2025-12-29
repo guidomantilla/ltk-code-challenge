@@ -17,6 +17,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"ltk-code-challenge/core"
 	"ltk-code-challenge/pkg/resources"
@@ -31,19 +33,20 @@ func main() {
 
 	viper.AutomaticEnv()
 
-	stopFn, err := resources.Logger(ctx)
+	conn, err := grpc.NewClient("localhost:4317", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup logging: %v", err))
+		//nolint:gocritic
+		log.Fatal().Msg(fmt.Sprintf("Unable to create grpc connection to otel collector: %v", err))
 	}
-	defer stopFn(ctx)
+	defer conn.Close()
 
-	stopFn, err = resources.Trace(ctx)
+	stopFn, err := resources.Trace(ctx, conn)
 	if err != nil {
 		log.Fatal().Msg(fmt.Sprintf("Unable to setup tracing: %v", err))
 	}
 	defer stopFn(ctx)
 
-	stopFn, err = resources.Measure(ctx)
+	stopFn, err = resources.Measure(ctx, conn)
 	if err != nil {
 		log.Fatal().Msg(fmt.Sprintf("Unable to setup metrics: %v", err))
 	}
@@ -52,6 +55,12 @@ func main() {
 	stopFn, err = resources.Profile(ctx)
 	if err != nil {
 		log.Fatal().Msg(fmt.Sprintf("Unable to setup profiling: %v", err))
+	}
+	defer stopFn(ctx)
+
+	stopFn, err = resources.Logger(ctx, conn)
+	if err != nil {
+		log.Fatal().Msg(fmt.Sprintf("Unable to setup logging: %v", err))
 	}
 	defer stopFn(ctx)
 
