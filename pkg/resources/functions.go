@@ -10,7 +10,6 @@ import (
 	"github.com/guidomantilla/yarumo/managed"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
@@ -28,7 +27,6 @@ func CreateDatabaseConnectionPool(ctx context.Context) (DBInstance, managed.Stop
 		viper.GetString("DB_USER"), viper.GetString("DB_PASSWORD"),
 		viper.GetString("DB_HOST"), viper.GetString("DB_PORT"), viper.GetString("DB_NAME")))
 	if err != nil {
-		log.Ctx(ctx).Error().Err(err).Msg(fmt.Sprintf("Unable to parse database connection string: %v", err))
 		return nil, noopStop, fmt.Errorf("failed to parse database connection string: %w", err)
 	}
 
@@ -36,13 +34,11 @@ func CreateDatabaseConnectionPool(ctx context.Context) (DBInstance, managed.Stop
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
-		log.Ctx(ctx).Error().Err(err).Msg(fmt.Sprintf("Unable to connect to database: %v", err))
 		return nil, noopStop, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	err = pool.Ping(ctx)
 	if err != nil {
-		log.Ctx(ctx).Error().Err(err).Msg(fmt.Sprintf("Unable to ping to database: %v", err))
 		return nil, noopStop, fmt.Errorf("failed to ping to database: %w", err)
 	}
 

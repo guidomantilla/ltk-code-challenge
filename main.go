@@ -29,9 +29,11 @@ func main() {
 
 	// 2. Logger base
 	ctx := log.Logger.WithContext(context.Background())
+	startupLogger := log.Ctx(ctx).With().Str("stage", "startup").Str("component", "main").Logger()
+	shutdownLogger := log.Ctx(ctx).With().Str("stage", "shut down").Str("component", "main").Logger()
 
-	log.Ctx(ctx).Info().Str("stage", "startup").Str("component", "main").Msg("application starting up")
-	defer log.Ctx(ctx).Info().Str("stage", "shut down").Str("component", "main").Msg("application stopped")
+	startupLogger.Info().Msg("application starting up")
+	defer shutdownLogger.Info().Msg("application stopped")
 
 	hookFn := func(ctx context.Context) (context.Context, error) {
 		log.Logger = log.Logger.Hook(resources.NewZerologHook(name, version))
@@ -42,15 +44,14 @@ func main() {
 	// 4. Bridge zerolog -> OTel Logs (still prints to stdout; additionally exports via OTLP to the collector)
 	ctx, stopFn, err := telemetry.Observe(ctx, name, version, env, hookFn, telemetry.WithInsecure())
 	if err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg(fmt.Sprintf("unable to setup otel telemetry: %v", err))
+		shutdownLogger.Fatal().Err(err).Msg(fmt.Sprintf("unable to setup otel telemetry: %v", err))
 	}
 	defer stopFn(ctx, 15*time.Second)
 
 	// 5. Recursos “core” (dependencies de negocio)
 	pool, stopFn, err := resources.CreateDatabaseConnectionPool(ctx)
 	if err != nil {
-
-		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg(fmt.Sprintf("unable to create database connection pool: %v", err))
+		shutdownLogger.Fatal().Err(err).Msg(fmt.Sprintf("unable to create database connection pool: %v", err))
 	}
 	defer stopFn(ctx, 15*time.Second)
 
@@ -79,25 +80,25 @@ func main() {
 	/*
 		_, stopFn, err = managed.BuildBaseServer(ctx, "base-server", errChan)
 		if err != nil {
-			log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg("unable to build base server")
+			shutdownLogger.Fatal().Err(err).Msg("unable to build base server")
 		}
 		defer stopFn(ctx, 15*time.Second)
 	*/
 	_, stopFn, err = managed.BuildHttpServer(ctx, "http-server", httpServer, errChan)
 	if err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg("unable to build http server")
+		shutdownLogger.Fatal().Err(err).Str("component", "main").Msg("unable to build http server")
 	}
 	defer stopFn(ctx, 15*time.Second)
 
-	log.Ctx(ctx).Info().Str("stage", "startup").Str("component", "main").Msg("application running")
+	startupLogger.Info().Msg("application running")
 
 	notifyCtx, cancelNotifyFn := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer cancelNotifyFn()
 
 	select {
 	case <-notifyCtx.Done():
-		log.Ctx(ctx).Info().Str("stage", "shut down").Str("component", "main").Msg("application shutdown requested")
+		startupLogger.Info().Msg("application shutdown requested")
 	case runErr := <-errChan:
-		log.Ctx(ctx).Error().Str("stage", "shut down").Str("component", "main").Err(runErr).Msg("runtime error")
+		shutdownLogger.Error().Err(runErr).Msg("runtime error")
 	}
 }
