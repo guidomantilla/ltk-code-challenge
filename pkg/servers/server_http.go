@@ -27,13 +27,13 @@ func NewHttpServer(server *http.Server) lifecycle.Server {
 }
 
 func (server *httpServer) Run(ctx context.Context) error {
-	log.Info().Str("stage", "startup").Str("component", server.name).Msg("starting up")
+	log.Ctx(ctx).Info().Str("stage", "startup").Str("component", server.name).Msg("starting up")
 
 	server.ctx = ctx
 
 	err := server.internal.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Error().Str("stage", "startup").Str("component", server.name).Err(err).Msg("failed to listen or serve")
+		log.Ctx(ctx).Error().Str("stage", "startup").Str("component", server.name).Err(err).Msg("failed to listen or serve")
 		return ErrServerFailedToStart(server.name, err)
 	}
 
@@ -41,12 +41,12 @@ func (server *httpServer) Run(ctx context.Context) error {
 }
 
 func (server *httpServer) Stop(ctx context.Context) error {
-	log.Info().Str("stage", "shut down").Str("component", server.name).Msg("stopping")
-	defer log.Info().Str("stage", "shut down").Str("component", server.name).Msg("stopped")
+	log.Ctx(ctx).Info().Str("stage", "shut down").Str("component", server.name).Msg("stopping")
+	defer log.Ctx(ctx).Info().Str("stage", "shut down").Str("component", server.name).Msg("stopped")
 
 	err := server.internal.Shutdown(ctx)
 	if err != nil {
-		log.Error().Str("stage", "shut down").Str("component", server.name).Err(err).Msg("failed to stop")
+		log.Ctx(ctx).Error().Str("stage", "shut down").Str("component", server.name).Err(err).Msg("failed to stop")
 		return ErrServerFailedToStop(server.name, err)
 	}
 

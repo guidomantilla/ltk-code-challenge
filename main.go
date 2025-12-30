@@ -5,103 +5,105 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/qmdx00/lifecycle"
+	"github.com/guidomantilla/yarumo/managed"
+	telemetry "github.com/guidomantilla/yarumo/telemetry/otel"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"ltk-code-challenge/core"
 	"ltk-code-challenge/pkg/resources"
-	"ltk-code-challenge/pkg/servers"
 )
 
 func main() {
 	var err error
 
-	ctx := context.Background()
-	name, version := "ltk-code-challenge", "1.0"
+	name, version, env := "ltk-code-challenge", "1.0", "local"
 
+	// 1. Config
 	viper.AutomaticEnv()
 
-	conn, err := grpc.NewClient("localhost:4317", grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		//nolint:gocritic
-		log.Fatal().Msg(fmt.Sprintf("Unable to create grpc connection to otel collector: %v", err))
-	}
-	defer conn.Close()
+	// 2. Logger base
+	ctx := log.Logger.WithContext(context.Background())
+	log.Ctx(ctx).Info().Str("stage", "startup").Str("component", "main").Msg("application starting up")
+	defer log.Ctx(ctx).Info().Str("stage", "shut down").Str("component", "main").Msg("application stopped")
 
-	stopFn, err := resources.Trace(ctx, conn)
-	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup tracing: %v", err))
+	hookFn := func(ctx context.Context) (context.Context, error) {
+		log.Logger = log.Logger.Hook(resources.NewZerologHook(name, version))
+		return log.Logger.WithContext(ctx), nil
 	}
-	defer stopFn(ctx)
 
-	stopFn, err = resources.Measure(ctx, conn)
+	// 3. Telemetry (traces/metrics/logs)
+	// 4. Bridge zerolog -> OTel Logs (still prints to stdout; additionally exports via OTLP to the collector)
+	ctx, stopFn, err := telemetry.Observe(ctx, name, version, env, hookFn, telemetry.WithInsecure())
 	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup metrics: %v", err))
+		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg(fmt.Sprintf("unable to setup otel telemetry: %v", err))
 	}
-	defer stopFn(ctx)
+	defer stopFn(ctx, 15*time.Second)
 
-	stopFn, err = resources.Profile(ctx)
-	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup profiling: %v", err))
-	}
-	defer stopFn(ctx)
-
-	stopFn, err = resources.Logger(ctx, conn)
-	if err != nil {
-		log.Fatal().Msg(fmt.Sprintf("Unable to setup logging: %v", err))
-	}
-	defer stopFn(ctx)
-
+	// 5. Recursos “core” (dependencias de negocio)
 	pool, stopFn, err := resources.CreateDatabaseConnectionPool(ctx)
 	if err != nil {
 		//nolint:gocritic
-		log.Fatal().Msg(fmt.Sprintf("Unable to create database connection pool: %v", err))
+		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg(fmt.Sprintf("unable to create database connection pool: %v", err))
 	}
-	defer stopFn(ctx)
+	defer stopFn(ctx, 15*time.Second)
 
+	//6. Wiring
 	repo := core.NewRepository(pool)
 	handlers := core.NewHandlers(repo)
 
-	app := lifecycle.NewApp(
-		lifecycle.WithName(name),
-		lifecycle.WithVersion(version),
-		lifecycle.WithSignal(syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT, syscall.SIGKILL),
-	)
-	{
+	// 7. Daemons/servers
+	tracerMiddleware := otelgin.Middleware("ltk-code-challenge")
+	metricsMiddleware := NewHTTPMetrics().Middleware()
 
-		tracerMiddleware := otelgin.Middleware("ltk-code-challenge")
-		metricsMiddleware := NewHTTPMetrics().Middleware()
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
+	router.Use(tracerMiddleware)
+	router.Use(metricsMiddleware)
 
-		router := gin.Default()
-		router.Use(tracerMiddleware)
-		router.Use(metricsMiddleware)
+	router.POST("/events", handlers.PostEvents)
+	router.GET("/events/:id", handlers.GetEvents)
 
-		router.POST("/events", handlers.PostEvents)
-		router.GET("/events/:id", handlers.GetEvents)
-
-		httpServer := &http.Server{
-			Addr:              net.JoinHostPort("localhost", "8080"),
-			Handler:           router,
-			ReadHeaderTimeout: 60000,
-		}
-
-		app.Attach(servers.BuildHttpServer(httpServer))
+	httpServer := &http.Server{
+		Addr:              net.JoinHostPort("localhost", "8080"),
+		Handler:           router,
+		ReadHeaderTimeout: 60 * time.Second,
 	}
 
-	if app.Run() != nil {
-		log.Err(err).Msg("application encountered an error")
+	errChan := make(chan error, 16)
+
+	_, stopFn, err = managed.BuildBaseServer(ctx, "base-server", errChan)
+	if err != nil {
+		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg("unable to build base server")
+	}
+	defer stopFn(ctx, 15*time.Second)
+
+	_, stopFn, err = managed.BuildHttpServer(ctx, "http-server", httpServer, errChan)
+	if err != nil {
+		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg("unable to build http server")
+	}
+	defer stopFn(ctx, 15*time.Second)
+
+	log.Ctx(ctx).Info().Str("stage", "startup").Str("component", "main").Msg("application running")
+
+	notifyCtx, cancelNotifyFn := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer cancelNotifyFn()
+
+	select {
+	case <-notifyCtx.Done():
+		log.Ctx(ctx).Info().Str("stage", "shut down").Str("component", "main").Msg("application shutdown requested")
+	case runErr := <-errChan:
+		log.Ctx(ctx).Error().Str("stage", "shut down").Str("component", "main").Err(runErr).Msg("runtime error")
 	}
 }
 
