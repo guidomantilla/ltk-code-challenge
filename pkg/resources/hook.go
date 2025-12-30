@@ -26,19 +26,20 @@ func NewZerologHook(serviceName string, serviceVersion string) *ZerologHook {
 }
 
 func (h *ZerologHook) Run(e *zerolog.Event, level zerolog.Level, msg string) {
-
 	b, ok := h.getBuffer(e)
 	if !ok {
 		return
 	}
 
 	var m map[string]any
+
 	err := json.Unmarshal(b, &m)
 	if err != nil {
 		return
 	}
 
 	var rec otelog.Record
+
 	ts := h.extractTimestamp(m)
 	sev, sevText := h.zerologLevelToOTel(level)
 
@@ -84,6 +85,7 @@ func (h *ZerologHook) getBuffer(e *zerolog.Event) ([]byte, bool) {
 	}
 
 	ev := v.Elem()
+
 	f := ev.FieldByName("buf")
 	if !f.IsValid() || f.Kind() != reflect.Slice || f.Type().Elem().Kind() != reflect.Uint8 {
 		return nil, false
@@ -97,6 +99,7 @@ func (h *ZerologHook) getBuffer(e *zerolog.Event) ([]byte, bool) {
 	if b[len(b)-1] != '}' {
 		b = append(b, '}')
 	}
+
 	return b, true
 }
 
@@ -118,6 +121,7 @@ func (h *ZerologHook) mapToAttrs(m map[string]any) []otelog.KeyValue {
 			kvs = append(kvs, otelog.String(k, fmt.Sprintf("%v", x)))
 		}
 	}
+
 	return kvs
 }
 

@@ -33,7 +33,9 @@ func NewRepository(pool DBInstance) *Repository {
 
 func (r *Repository) SaveEvent(ctx context.Context, event *Event) (*Event, error) {
 	start := time.Now()
+
 	var err error
+
 	defer func() { r.metrics.Observe(ctx, "save_event", start, err) }()
 
 	ctx, span := r.tracer.Start(ctx, "repository.SaveEvent")
@@ -64,7 +66,9 @@ func (r *Repository) SaveEvent(ctx context.Context, event *Event) (*Event, error
 
 func (r *Repository) GetEventById(ctx context.Context, id string) (*Event, error) {
 	start := time.Now()
+
 	var err error
+
 	defer func() { r.metrics.Observe(ctx, "get_event_by_id", start, err) }()
 
 	ctx, span := r.tracer.Start(ctx, "repository.GetEventById")

@@ -34,6 +34,7 @@ func main() {
 
 	// 2. Logger base
 	ctx := log.Logger.WithContext(context.Background())
+
 	log.Ctx(ctx).Info().Str("stage", "startup").Str("component", "main").Msg("application starting up")
 	defer log.Ctx(ctx).Info().Str("stage", "shut down").Str("component", "main").Msg("application stopped")
 
@@ -50,15 +51,15 @@ func main() {
 	}
 	defer stopFn(ctx, 15*time.Second)
 
-	// 5. Recursos “core” (dependencias de negocio)
+	// 5. Recursos “core” (dependencies de negocio)
 	pool, stopFn, err := resources.CreateDatabaseConnectionPool(ctx)
 	if err != nil {
-		//nolint:gocritic
+
 		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg(fmt.Sprintf("unable to create database connection pool: %v", err))
 	}
 	defer stopFn(ctx, 15*time.Second)
 
-	//6. Wiring
+	// 6. Wiring
 	repo := core.NewRepository(pool)
 	handlers := core.NewHandlers(repo)
 
@@ -67,6 +68,7 @@ func main() {
 	metricsMiddleware := NewHTTPMetrics().Middleware()
 
 	gin.SetMode(gin.ReleaseMode)
+
 	router := gin.Default()
 	router.Use(tracerMiddleware)
 	router.Use(metricsMiddleware)
@@ -130,6 +132,7 @@ func NewHTTPMetrics() *HTTPMetrics {
 func (m *HTTPMetrics) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
+
 		c.Next()
 
 		route := c.FullPath()
