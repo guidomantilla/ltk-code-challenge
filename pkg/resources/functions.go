@@ -6,15 +6,23 @@ import (
 	"time"
 
 	"github.com/exaring/otelpgx"
+	"github.com/gin-gonic/gin"
 	"github.com/guidomantilla/yarumo/managed"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 func noopStop(_ context.Context, _ time.Duration) {}
 
-func CreateDatabaseConnectionPool(ctx context.Context) (*pgxpool.Pool, managed.StopFn, error) {
+type DBInstance interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func CreateDatabaseConnectionPool(ctx context.Context) (DBInstance, managed.StopFn, error) {
 	//nolint:nosprintfhostport
 	cfg, err := pgxpool.ParseConfig(fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		viper.GetString("DB_USER"), viper.GetString("DB_PASSWORD"),
@@ -43,4 +51,12 @@ func CreateDatabaseConnectionPool(ctx context.Context) (*pgxpool.Pool, managed.S
 	}
 
 	return pool, stopFn, nil
+}
+
+func TracerMiddleware(name string) gin.HandlerFunc {
+	return otelgin.Middleware(name)
+}
+
+func MeterMiddleware(name string) gin.HandlerFunc {
+	return NewHTTPMetrics(name).Middleware()
 }

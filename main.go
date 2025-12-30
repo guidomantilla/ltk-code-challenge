@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -15,10 +14,6 @@ import (
 	telemetry "github.com/guidomantilla/yarumo/telemetry/otel"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 
 	"ltk-code-challenge/core"
 	"ltk-code-challenge/pkg/resources"
@@ -64,14 +59,12 @@ func main() {
 	handlers := core.NewHandlers(repo)
 
 	// 7. Daemons/servers
-	tracerMiddleware := otelgin.Middleware("ltk-code-challenge")
-	metricsMiddleware := NewHTTPMetrics().Middleware()
 
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.Default()
-	router.Use(tracerMiddleware)
-	router.Use(metricsMiddleware)
+	router.Use(resources.TracerMiddleware(name))
+	router.Use(resources.MeterMiddleware(name))
 
 	router.POST("/events", handlers.PostEvents)
 	router.GET("/events/:id", handlers.GetEvents)
@@ -83,13 +76,13 @@ func main() {
 	}
 
 	errChan := make(chan error, 16)
-
-	_, stopFn, err = managed.BuildBaseServer(ctx, "base-server", errChan)
-	if err != nil {
-		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg("unable to build base server")
-	}
-	defer stopFn(ctx, 15*time.Second)
-
+	/*
+		_, stopFn, err = managed.BuildBaseServer(ctx, "base-server", errChan)
+		if err != nil {
+			log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg("unable to build base server")
+		}
+		defer stopFn(ctx, 15*time.Second)
+	*/
 	_, stopFn, err = managed.BuildHttpServer(ctx, "http-server", httpServer, errChan)
 	if err != nil {
 		log.Ctx(ctx).Fatal().Err(err).Str("stage", "shut down").Str("component", "main").Msg("unable to build http server")
@@ -106,55 +99,5 @@ func main() {
 		log.Ctx(ctx).Info().Str("stage", "shut down").Str("component", "main").Msg("application shutdown requested")
 	case runErr := <-errChan:
 		log.Ctx(ctx).Error().Str("stage", "shut down").Str("component", "main").Err(runErr).Msg("runtime error")
-	}
-}
-
-type HTTPMetrics struct {
-	reqs    metric.Int64Counter
-	latency metric.Float64Histogram
-}
-
-func NewHTTPMetrics() *HTTPMetrics {
-	meter := otel.Meter("ltk-code-challenge/http")
-
-	reqs, _ := meter.Int64Counter(
-		"http.server.requests",
-		metric.WithDescription("HTTP requests"),
-	)
-	latency, _ := meter.Float64Histogram(
-		"http.server.duration.ms",
-		metric.WithDescription("HTTP request duration in milliseconds"),
-	)
-
-	return &HTTPMetrics{reqs: reqs, latency: latency}
-}
-
-func (m *HTTPMetrics) Middleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-
-		c.Next()
-
-		route := c.FullPath()
-		if route == "" {
-			route = "unmatched"
-		}
-
-		status := c.Writer.Status()
-		method := c.Request.Method
-
-		attrs := []attribute.KeyValue{
-			attribute.String("http.route", route),
-			attribute.String("http.method", method),
-			attribute.Int("http.status_code", status),
-			attribute.String("http.status_class", strconv.Itoa(status/100)+"xx"),
-		}
-
-		m.reqs.Add(c.Request.Context(), 1, metric.WithAttributes(attrs...))
-		m.latency.Record(
-			c.Request.Context(),
-			float64(time.Since(start).Milliseconds()),
-			metric.WithAttributes(attrs...),
-		)
 	}
 }

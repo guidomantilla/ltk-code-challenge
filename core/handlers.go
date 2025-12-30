@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -10,20 +9,20 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type RepositoryInterface interface {
-	SaveEvent(ctx context.Context, event *Event) (*Event, error)
-	GetEventById(ctx context.Context, id string) (*Event, error)
+type Handlers interface {
+	PostEvents(gctx *gin.Context)
+	GetEvents(gctx *gin.Context)
 }
 
-type Handlers struct {
-	repository RepositoryInterface
+type handlers struct {
+	repository Repository
 }
 
-func NewHandlers(repository RepositoryInterface) *Handlers {
-	return &Handlers{repository: repository}
+func NewHandlers(repository Repository) Handlers {
+	return &handlers{repository: repository}
 }
 
-func (h *Handlers) PostEvents(gctx *gin.Context) {
+func (h *handlers) PostEvents(gctx *gin.Context) {
 	ctx := gctx.Request.Context()
 
 	var event Event
@@ -59,7 +58,7 @@ func (h *Handlers) PostEvents(gctx *gin.Context) {
 	gctx.JSON(http.StatusCreated, savedEvent)
 }
 
-func (h *Handlers) GetEvents(gctx *gin.Context) {
+func (h *handlers) GetEvents(gctx *gin.Context) {
 	ctx := gctx.Request.Context()
 
 	// Ready body

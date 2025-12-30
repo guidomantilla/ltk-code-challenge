@@ -5,33 +5,34 @@ import (
 	"fmt"
 	"time"
 
-	pgx "github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+
+	"ltk-code-challenge/pkg/resources"
 )
 
-type DBInstance interface {
-	Begin(ctx context.Context) (pgx.Tx, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+type Repository interface {
+	SaveEvent(ctx context.Context, event *Event) (*Event, error)
+	GetEventById(ctx context.Context, id string) (*Event, error)
 }
 
-type Repository struct {
+type repository struct {
 	tracer  trace.Tracer
 	metrics *DBMetrics
-	pool    DBInstance
+	pool    resources.DBInstance
 }
 
-func NewRepository(pool DBInstance) *Repository {
-	return &Repository{
+func NewRepository(pool resources.DBInstance) Repository {
+	return &repository{
 		tracer:  otel.GetTracerProvider().Tracer("ltk-code-challenge/core"),
 		metrics: NewDBMetrics(),
 		pool:    pool,
 	}
 }
 
-func (r *Repository) SaveEvent(ctx context.Context, event *Event) (*Event, error) {
+func (r *repository) SaveEvent(ctx context.Context, event *Event) (*Event, error) {
 	start := time.Now()
 
 	var err error
@@ -64,7 +65,7 @@ func (r *Repository) SaveEvent(ctx context.Context, event *Event) (*Event, error
 	return &savedEvent, nil
 }
 
-func (r *Repository) GetEventById(ctx context.Context, id string) (*Event, error) {
+func (r *repository) GetEventById(ctx context.Context, id string) (*Event, error) {
 	start := time.Now()
 
 	var err error
