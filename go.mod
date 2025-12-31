@@ -4,6 +4,8 @@ go 1.25.5
 
 replace github.com/guidomantilla/yarumo/common => ../yarumo/modules/common
 
+replace github.com/guidomantilla/yarumo/config => ../yarumo/modules/config
+
 replace github.com/guidomantilla/yarumo/managed => ../yarumo/modules/managed
 
 replace github.com/guidomantilla/yarumo/telemetry/otel => ../yarumo/modules/telemetry/otel
@@ -12,6 +14,7 @@ require (
 	github.com/exaring/otelpgx v0.9.4
 	github.com/gin-gonic/gin v1.11.0
 	github.com/guidomantilla/yarumo/common v0.0.0-00010101000000-000000000000
+	github.com/guidomantilla/yarumo/config v0.0.0-00010101000000-000000000000
 	github.com/guidomantilla/yarumo/managed v0.0.0-00010101000000-000000000000
 	github.com/guidomantilla/yarumo/telemetry/otel v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgx/v5 v5.8.0

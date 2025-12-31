@@ -11,10 +11,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	commonhttp "github.com/guidomantilla/yarumo/common/http"
+	"github.com/guidomantilla/yarumo/config"
 	"github.com/guidomantilla/yarumo/managed"
 	telemetry "github.com/guidomantilla/yarumo/telemetry/otel"
 	"github.com/rs/zerolog/log"
-	"github.com/spf13/viper"
 
 	"ltk-code-challenge/core"
 	"ltk-code-challenge/pkg/resources"
@@ -25,11 +25,8 @@ func main() {
 
 	name, version, env := "ltk-code-challenge", "1.0", "local"
 
-	// 1. Config
-	viper.AutomaticEnv()
-
-	// 2. Logger base
-	ctx := log.Logger.WithContext(context.Background())
+	// 1. Config (Logger base included)
+	ctx := config.Default(context.Background(), name, version, env)
 	startupLogger := log.Ctx(ctx).With().Str("stage", "startup").Str("component", "main").Logger()
 	shutdownLogger := log.Ctx(ctx).With().Str("stage", "shut down").Str("component", "main").Logger()
 
@@ -82,20 +79,20 @@ func main() {
 
 	errChan := make(chan error, 16)
 
-	_, stopFn, err = managed.BuildBaseServer(ctx, "base-server", errChan)
+	_, stopFn, err = managed.BuildBaseWorker(ctx, "base-server", nil, errChan)
 	if err != nil {
 		shutdownLogger.Fatal().Err(err).Msg("unable to build base server")
 	}
 	defer stopFn(ctx, 15*time.Second)
 
-	debugServer := commonhttp.NewServer(ctx, "localhost", "6060", debugHandler)
+	debugServer := commonhttp.NewServer("localhost", "6060", debugHandler)
 	_, stopFn, err = managed.BuildHttpServer(ctx, "debug-server", debugServer, errChan)
 	if err != nil {
 		shutdownLogger.Fatal().Err(err).Str("component", "main").Msg("unable to build debug server")
 	}
 	defer stopFn(ctx, 15*time.Second)
 
-	restServer := commonhttp.NewServer(ctx, "localhost", "8080", restHandler)
+	restServer := commonhttp.NewServer("localhost", "8080", restHandler)
 	_, stopFn, err = managed.BuildHttpServer(ctx, "rest-server", restServer, errChan)
 	if err != nil {
 		shutdownLogger.Fatal().Err(err).Str("component", "main").Msg("unable to build rest server")
