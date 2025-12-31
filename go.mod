@@ -2,13 +2,16 @@ module ltk-code-challenge
 
 go 1.25.5
 
-replace github.com/guidomantilla/yarumo/telemetry/otel => ../yarumo/modules/telemetry/otel
+replace github.com/guidomantilla/yarumo/common => ../yarumo/modules/common
 
 replace github.com/guidomantilla/yarumo/managed => ../yarumo/modules/managed
+
+replace github.com/guidomantilla/yarumo/telemetry/otel => ../yarumo/modules/telemetry/otel
 
 require (
 	github.com/exaring/otelpgx v0.9.4
 	github.com/gin-gonic/gin v1.11.0
+	github.com/guidomantilla/yarumo/common v0.0.0-00010101000000-000000000000
 	github.com/guidomantilla/yarumo/managed v0.0.0-00010101000000-000000000000
 	github.com/guidomantilla/yarumo/telemetry/otel v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgx/v5 v5.8.0
@@ -19,12 +22,13 @@ require (
 	github.com/stretchr/testify v1.11.1
 	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.64.0
 	go.opentelemetry.io/otel v1.39.0
-	go.opentelemetry.io/otel/log v0.14.0
+	go.opentelemetry.io/otel/log v0.15.0
 	go.opentelemetry.io/otel/metric v1.39.0
 	go.opentelemetry.io/otel/trace v1.39.0
 )
 
 require (
+	github.com/avast/retry-go/v4 v4.7.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.2 // indirect
 	github.com/bytedance/sonic/loader v0.4.0 // indirect
@@ -43,6 +47,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.1 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.4 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -75,7 +80,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.39.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.39.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.39.0 // indirect
-	go.opentelemetry.io/otel/sdk/log v0.14.0 // indirect
+	go.opentelemetry.io/otel/sdk/log v0.15.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.39.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
@@ -85,6 +90,7 @@ require (
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251222181119-0a764e51fe1b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect
 	google.golang.org/grpc v1.78.0 // indirect

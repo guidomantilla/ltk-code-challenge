@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
+	"net/http/pprof"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	commonhttp "github.com/guidomantilla/yarumo/common/http"
 	"github.com/guidomantilla/yarumo/managed"
 	telemetry "github.com/guidomantilla/yarumo/telemetry/otel"
 	"github.com/rs/zerolog/log"
@@ -59,38 +60,51 @@ func main() {
 	repo := core.NewRepository(pool)
 	handlers := core.NewHandlers(repo)
 
-	// 7. Daemons/servers
+	// 7. Daemons/servers setup
 
 	gin.SetMode(gin.ReleaseMode)
 
-	router := gin.Default()
-	router.Use(resources.TracerMiddleware(name))
-	router.Use(resources.MeterMiddleware(name))
+	restHandler := gin.Default()
+	restHandler.Use(resources.TracerMiddleware(name))
+	restHandler.Use(resources.MeterMiddleware(name))
 
-	router.POST("/events", handlers.PostEvents)
-	router.GET("/events/:id", handlers.GetEvents)
+	restHandler.POST("/events", handlers.PostEvents)
+	restHandler.GET("/events/:id", handlers.GetEvents)
 
-	httpServer := &http.Server{
-		Addr:              net.JoinHostPort("localhost", "8080"),
-		Handler:           router,
-		ReadHeaderTimeout: 60 * time.Second,
-	}
+	debugHandler := http.NewServeMux()
+	debugHandler.HandleFunc("/debug/pprof/", pprof.Index)
+	debugHandler.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	debugHandler.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	debugHandler.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	debugHandler.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	// 8. Daemons/servers lifecycle
 
 	errChan := make(chan error, 16)
-	/*
-		_, stopFn, err = managed.BuildBaseServer(ctx, "base-server", errChan)
-		if err != nil {
-			shutdownLogger.Fatal().Err(err).Msg("unable to build base server")
-		}
-		defer stopFn(ctx, 15*time.Second)
-	*/
-	_, stopFn, err = managed.BuildHttpServer(ctx, "http-server", httpServer, errChan)
+
+	_, stopFn, err = managed.BuildBaseServer(ctx, "base-server", errChan)
 	if err != nil {
-		shutdownLogger.Fatal().Err(err).Str("component", "main").Msg("unable to build http server")
+		shutdownLogger.Fatal().Err(err).Msg("unable to build base server")
+	}
+	defer stopFn(ctx, 15*time.Second)
+
+	debugServer := commonhttp.NewServer(ctx, "localhost", "6060", debugHandler)
+	_, stopFn, err = managed.BuildHttpServer(ctx, "debug-server", debugServer, errChan)
+	if err != nil {
+		shutdownLogger.Fatal().Err(err).Str("component", "main").Msg("unable to build debug server")
+	}
+	defer stopFn(ctx, 15*time.Second)
+
+	restServer := commonhttp.NewServer(ctx, "localhost", "8080", restHandler)
+	_, stopFn, err = managed.BuildHttpServer(ctx, "rest-server", restServer, errChan)
+	if err != nil {
+		shutdownLogger.Fatal().Err(err).Str("component", "main").Msg("unable to build rest server")
 	}
 	defer stopFn(ctx, 15*time.Second)
 
 	startupLogger.Info().Msg("application running")
+
+	// 9. Wait for shutdown signal
 
 	notifyCtx, cancelNotifyFn := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer cancelNotifyFn()
