@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/pprof"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/guidomantilla/yarumo/common/diagnostics"
 	commonhttp "github.com/guidomantilla/yarumo/common/http"
 	"github.com/guidomantilla/yarumo/config"
 	"github.com/guidomantilla/yarumo/managed"
@@ -68,32 +67,29 @@ func main() {
 	restHandler.POST("/events", handlers.PostEvents)
 	restHandler.GET("/events/:id", handlers.GetEvents)
 
-	debugHandler := http.NewServeMux()
-	debugHandler.HandleFunc("/debug/pprof/", pprof.Index)
-	debugHandler.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	debugHandler.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	debugHandler.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	debugHandler.HandleFunc("/debug/pprof/trace", pprof.Trace)
-
 	// 8. Daemons/servers lifecycle
 
 	errChan := make(chan error, 16)
 
-	_, stopFn, err = managed.BuildBaseWorker(ctx, "base-server", nil, errChan)
+	_, stopFn, err = managed.BuildBaseWorker(ctx, "keep-alive-worker", nil, errChan)
 	if err != nil {
 		shutdownLogger.Fatal().Err(err).Msg("unable to build base server")
 	}
 	defer stopFn(ctx, 15*time.Second)
 
-	debugServer := commonhttp.NewServer("localhost", "6060", debugHandler)
-	_, stopFn, err = managed.BuildHttpServer(ctx, "debug-server", debugServer, errChan)
+	_, stopFn, err = managed.BuildTraceFlightRecorderWorker(ctx, "trace-flight-recorder", diagnostics.NewTraceFlightRecorder(), errChan)
+	if err != nil {
+		shutdownLogger.Fatal().Err(err).Msg("unable to build trace flight recorder worker")
+	}
+	defer stopFn(ctx, 15*time.Second)
+
+	_, stopFn, err = managed.BuildHttpServer(ctx, "debug-server", commonhttp.NewServer("localhost", "6060", diagnostics.NewPprofHandler()), errChan)
 	if err != nil {
 		shutdownLogger.Fatal().Err(err).Str("component", "main").Msg("unable to build debug server")
 	}
 	defer stopFn(ctx, 15*time.Second)
 
-	restServer := commonhttp.NewServer("localhost", "8080", restHandler)
-	_, stopFn, err = managed.BuildHttpServer(ctx, "rest-server", restServer, errChan)
+	_, stopFn, err = managed.BuildHttpServer(ctx, "rest-server", commonhttp.NewServer("localhost", "8080", restHandler), errChan)
 	if err != nil {
 		shutdownLogger.Fatal().Err(err).Str("component", "main").Msg("unable to build rest server")
 	}
